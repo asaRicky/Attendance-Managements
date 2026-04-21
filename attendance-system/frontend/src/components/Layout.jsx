@@ -45,8 +45,21 @@ export default function Layout() {
           ))}
         </nav>
 
+        {/* pushes everything below to the bottom */}
+        <div style={{ flex: 1 }} />
+
         <div className="sb-section">Account</div>
         <div style={{ padding: '0 10px 8px' }}>
+          <NavLink
+            to="/dashboard/settings"
+            className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
+          >
+            <svg className="ni" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
+              <circle cx="8" cy="8" r="2.5"/>
+              <path d="M8 1.5v1M8 13.5v1M1.5 8h1M13.5 8h1M3.4 3.4l.7.7M11.9 11.9l.7.7M11.9 3.4l-.7.7M3.4 11.9l.7-.7"/>
+            </svg>
+            Settings
+          </NavLink>
           <button className="nav-link" onClick={() => { logout(); navigate('/') }}>
             <svg className="ni" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
               <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6"/>

@@ -35,9 +35,9 @@ export default function App() {
         <Route path="attendance" element={<Attendance />} />
         <Route path="reports"    element={<Reports />} />
         <Route path="settings"   element={<Settings />} />
-        <Route path="/student-register" element={<StudentSelfRegister />} />
 
       </Route>
+      <Route path="/student-register" element={<StudentSelfRegister />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import QRCode from 'qrcode'
 import api from '../api/client'
 import { useToast, Toasts } from '../hooks/useToast'
 
@@ -9,36 +10,50 @@ const EMPTY   = { full_name:'', student_id:'', school:'SCES', department:'CS', y
 function genID() { return String(Math.floor(100000 + Math.random() * 900000)) }
 
 export default function Students() {
-  const [students, setStudents] = useState([])
-  const [filtered, setFiltered] = useState([])
-  const [search, setSearch]     = useState('')
-  const [fSchool, setFSchool]   = useState('')
-  const [loading, setLoading]   = useState(true)
-  const [modal, setModal]       = useState(null)  // null | 'add' | 'edit' | 'delete'
-  const [selected, setSelected] = useState(null)
-  const [form, setForm]         = useState(EMPTY)
-  const [saving, setSaving]     = useState(false)
-  const { toasts, toast }       = useToast()
+  const [students, setStudents]   = useState([])
+  const [pending,  setPending]    = useState([])
+  const [filtered, setFiltered]   = useState([])
+  const [search,   setSearch]     = useState('')
+  const [fSchool,  setFSchool]    = useState('')
+  const [tab,      setTab]        = useState('approved') // 'approved' | 'pending'
+  const [loading,  setLoading]    = useState(true)
+  const [modal,    setModal]      = useState(null)
+  const [selected, setSelected]   = useState(null)
+  const [form,     setForm]       = useState(EMPTY)
+  const [saving,   setSaving]     = useState(false)
+  const [qrModal,  setQrModal]    = useState(false)
+  const [qrImg,    setQrImg]      = useState('')
+  const [qrLink,   setQrLink]     = useState('')
+  const [qrForm,   setQrForm]     = useState({ school:'SCES', department:'CS' })
+  const [qrLoading,setQrLoading]  = useState(false)
+  const { toasts, toast }         = useToast()
 
   useEffect(() => { load() }, [])
+
   useEffect(() => {
-    let d = students
+    let d = tab === 'approved' ? students : pending
     if (search)  d = d.filter(s => `${s.full_name} ${s.student_id} ${s.reg_number} ${s.email}`.toLowerCase().includes(search.toLowerCase()))
     if (fSchool) d = d.filter(s => s.school === fSchool)
     setFiltered(d)
-  }, [students, search, fSchool])
+  }, [students, pending, search, fSchool, tab])
 
   async function load() {
     setLoading(true)
-    try { const r = await api.get('/students/'); setStudents(r.data); setFiltered(r.data) }
-    catch { toast('Failed to load students','err') }
+    try {
+      const [r1, r2] = await Promise.all([
+        api.get('/students/'),
+        api.get('/students/pending'),
+      ])
+      setStudents(r1.data)
+      setPending(r2.data)
+    } catch { toast('Failed to load students','err') }
     finally { setLoading(false) }
   }
 
-  function openAdd() { setForm({ ...EMPTY, student_id: genID() }); setModal('add') }
+  function openAdd()   { setForm({ ...EMPTY, student_id: genID() }); setModal('add') }
   function openEdit(s) { setForm({ full_name:s.full_name, student_id:s.student_id||s.reg_number, school:s.school, department:s.department, year:s.year, semester:s.semester, email:s.email||'', phone:s.phone||'', gender:s.gender||'Male' }); setSelected(s); setModal('edit') }
   function openDel(s)  { setSelected(s); setModal('delete') }
-  function closeModal() { setModal(null); setSelected(null) }
+  function closeModal(){ setModal(null); setSelected(null) }
 
   async function handleSave() {
     if (!form.full_name || !form.student_id) return toast('Name and ID required','err')
@@ -59,6 +74,41 @@ export default function Students() {
     finally { setSaving(false) }
   }
 
+  async function handleApprove(s) {
+    try { await api.patch(`/students/${s._id}/approve`); toast(`${s.full_name} approved`); load() }
+    catch { toast('Failed to approve','err') }
+  }
+
+  async function handleReject(s) {
+    try { await api.delete(`/students/${s._id}/reject`); toast('Rejected & removed'); load() }
+    catch { toast('Failed to reject','err') }
+  }
+
+  async function generateQR() {
+    setQrLoading(true)
+    try {
+      const r    = await api.post('/students/generate-link', qrForm)
+      const base = window.location.origin
+      const url  = `${base}/student-register?token=${r.data.token}&school=${r.data.school}&department=${r.data.department}`
+      setQrLink(url)
+      const img  = await QRCode.toDataURL(url, { width: 300, margin: 2, color: { dark:'#000000', light:'#ffffff' } })
+      setQrImg(img)
+    } catch { toast('Failed to generate QR','err') }
+    finally { setQrLoading(false) }
+  }
+
+  function downloadQR() {
+    const a = document.createElement('a')
+    a.href     = qrImg
+    a.download = `self-register-qr-${qrForm.school}-${qrForm.department}.png`
+    a.click()
+  }
+
+  function copyLink() {
+    navigator.clipboard.writeText(qrLink)
+    toast('Link copied!')
+  }
+
   const F = ({ label, k, type='text', placeholder, options, half }) => (
     <div className="fg" style={{ gridColumn: half ? undefined : '1/-1' }}>
       <label className="fl">{label}</label>
@@ -76,7 +126,7 @@ export default function Students() {
     <div className="page-in">
       <div className="topbar">
         <div className="tb-title">Students</div>
-        <div className="tb-meta">{filtered.length} records</div>
+        <div className="tb-meta">{students.length} enrolled · {pending.length} pending</div>
       </div>
 
       <div className="body">
@@ -85,10 +135,33 @@ export default function Students() {
             <div className="sh-title">Student Registry</div>
             <div className="sh-sub">All enrolled students across Strathmore schools</div>
           </div>
-          <button className="btn btn-lime" onClick={openAdd}>
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6.5 1v11M1 6.5h11"/></svg>
-            Add Student
-          </button>
+          <div style={{ display:'flex', gap:8 }}>
+            <button className="btn btn-ghost" onClick={() => { setQrImg(''); setQrLink(''); setQrModal(true) }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3M17 17h4M14 21h4v-4"/></svg>
+              QR Register
+            </button>
+            <button className="btn btn-lime" onClick={openAdd}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6.5 1v11M1 6.5h11"/></svg>
+              Add Student
+            </button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:'1px solid var(--border)', paddingBottom:0 }}>
+          {['approved','pending'].map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              style={{ padding:'7px 16px', fontSize:'0.8rem', fontWeight:600, border:'none', background:'none', cursor:'pointer',
+                color: tab===t ? 'var(--lime,#b6f542)' : 'var(--muted)',
+                borderBottom: tab===t ? '2px solid var(--lime,#b6f542)' : '2px solid transparent',
+                textTransform:'capitalize', letterSpacing:'0.04em' }}>
+              {t === 'approved' ? `Enrolled (${students.length})` : (
+                <span style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  Pending {pending.length > 0 && <span style={{ background:'var(--lime,#b6f542)', color:'#000', borderRadius:99, padding:'1px 7px', fontSize:'0.7rem' }}>{pending.length}</span>}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
 
         {/* Filters */}
@@ -103,43 +176,143 @@ export default function Students() {
           </select>
         </div>
 
-        <div className="card card-flush">
-          <div className="tbl-wrap">
-            <table>
-              <thead><tr><th>#</th><th>Student ID</th><th>Full Name</th><th>School</th><th>Dept</th><th>Year</th><th>Email</th><th>Actions</th></tr></thead>
-              <tbody>
-                {loading ? [1,2,3,4,5].map(i => (
-                  <tr key={i}>{[1,2,3,4,5,6,7,8].map(j => <td key={j}><div className="sk" style={{ height:12, width:j===0?20:'75%' }} /></td>)}</tr>
-                )) : filtered.length === 0 ? (
-                  <tr><td colSpan="8"><div className="empty"><div className="empty-text">No students found</div></div></td></tr>
-                ) : filtered.map((s,i) => (
-                  <tr key={s._id||i}>
-                    <td><span className="mono muted" style={{ fontSize:'0.68rem' }}>{i+1}</span></td>
-                    <td>
-                      <span style={{ fontFamily:'var(--mono)', fontSize:'0.82rem', background:'var(--bg3)', padding:'3px 8px', borderRadius:6, border:'1px solid var(--border2)', letterSpacing:'0.06em' }}>
-                        {s.student_id || s.reg_number}
-                      </span>
-                    </td>
-                    <td style={{ fontWeight:600 }}>{s.full_name}</td>
-                    <td><span className="badge b-lime">{s.school}</span></td>
-                    <td><span className="muted sm">{s.department}</span></td>
-                    <td><span className="mono muted sm">Y{s.year}</span></td>
-                    <td><span className="muted sm trunc" style={{ maxWidth:160, display:'block' }}>{s.email}</span></td>
-                    <td>
-                      <div style={{ display:'flex', gap:5 }}>
-                        <button className="btn btn-ghost btn-sm" onClick={() => openEdit(s)}>Edit</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => openDel(s)}>Remove</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* ── Approved Tab ── */}
+        {tab === 'approved' && (
+          <div className="card card-flush">
+            <div className="tbl-wrap">
+              <table>
+                <thead><tr><th>#</th><th>Student ID</th><th>Full Name</th><th>School</th><th>Dept</th><th>Year</th><th>Email</th><th>Actions</th></tr></thead>
+                <tbody>
+                  {loading ? [1,2,3,4,5].map(i => (
+                    <tr key={i}>{[1,2,3,4,5,6,7,8].map(j => <td key={j}><div className="sk" style={{ height:12, width:j===0?20:'75%' }} /></td>)}</tr>
+                  )) : filtered.length === 0 ? (
+                    <tr><td colSpan="8"><div className="empty"><div className="empty-text">No students found</div></div></td></tr>
+                  ) : filtered.map((s,i) => (
+                    <tr key={s._id||i}>
+                      <td><span className="mono muted" style={{ fontSize:'0.68rem' }}>{i+1}</span></td>
+                      <td>
+                        <span style={{ fontFamily:'var(--mono)', fontSize:'0.82rem', background:'var(--bg3)', padding:'3px 8px', borderRadius:6, border:'1px solid var(--border2)', letterSpacing:'0.06em' }}>
+                          {s.student_id || s.reg_number}
+                        </span>
+                      </td>
+                      <td style={{ fontWeight:600 }}>{s.full_name}</td>
+                      <td><span className="badge b-lime">{s.school}</span></td>
+                      <td><span className="muted sm">{s.department}</span></td>
+                      <td><span className="mono muted sm">Y{s.year}</span></td>
+                      <td><span className="muted sm trunc" style={{ maxWidth:160, display:'block' }}>{s.email}</span></td>
+                      <td>
+                        <div style={{ display:'flex', gap:5 }}>
+                          <button className="btn btn-ghost btn-sm" onClick={() => openEdit(s)}>Edit</button>
+                          <button className="btn btn-danger btn-sm" onClick={() => openDel(s)}>Remove</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* ── Pending Tab ── */}
+        {tab === 'pending' && (
+          <div className="card card-flush">
+            {pending.length === 0 && !loading ? (
+              <div className="empty" style={{ padding:48 }}>
+                <div className="empty-text">No pending registrations</div>
+                <div className="muted sm" style={{ marginTop:6 }}>Students who self-register via QR will appear here for approval</div>
+              </div>
+            ) : (
+              <div className="tbl-wrap">
+                <table>
+                  <thead><tr><th>#</th><th>Student ID</th><th>Full Name</th><th>School</th><th>Dept</th><th>Year</th><th>Email</th><th>Actions</th></tr></thead>
+                  <tbody>
+                    {loading ? [1,2,3].map(i => (
+                      <tr key={i}>{[1,2,3,4,5,6,7,8].map(j => <td key={j}><div className="sk" style={{ height:12, width:'75%' }} /></td>)}</tr>
+                    )) : filtered.map((s,i) => (
+                      <tr key={s._id||i} style={{ background:'rgba(182,245,66,0.03)' }}>
+                        <td><span className="mono muted" style={{ fontSize:'0.68rem' }}>{i+1}</span></td>
+                        <td>
+                          <span style={{ fontFamily:'var(--mono)', fontSize:'0.82rem', background:'var(--bg3)', padding:'3px 8px', borderRadius:6, border:'1px solid var(--border2)', letterSpacing:'0.06em' }}>
+                            {s.student_id || s.reg_number}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight:600 }}>{s.full_name}</td>
+                        <td><span className="badge b-lime">{s.school}</span></td>
+                        <td><span className="muted sm">{s.department}</span></td>
+                        <td><span className="mono muted sm">Y{s.year}</span></td>
+                        <td><span className="muted sm trunc" style={{ maxWidth:160, display:'block' }}>{s.email}</span></td>
+                        <td>
+                          <div style={{ display:'flex', gap:5 }}>
+                            <button className="btn btn-lime btn-sm" onClick={() => handleApprove(s)}>Approve</button>
+                            <button className="btn btn-danger btn-sm" onClick={() => handleReject(s)}>Reject</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Add / Edit Modal */}
+      {/* ── QR Modal ── */}
+      {qrModal && (
+        <div className="overlay" onClick={e => e.target === e.currentTarget && setQrModal(false)}>
+          <div className="modal" style={{ maxWidth:460 }}>
+            <div className="modal-h">
+              <span className="modal-title">Generate Self-Register QR</span>
+              <button className="btn btn-ghost btn-icon" onClick={() => setQrModal(false)}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M2 2l10 10M12 2L2 12"/></svg>
+              </button>
+            </div>
+            <div className="modal-b">
+              <p style={{ fontSize:'0.82rem', color:'var(--muted)', marginBottom:16, lineHeight:1.7 }}>
+                Generate a QR code for your class. Students scan it and fill a short form — their entry goes into the <strong style={{ color:'var(--white)' }}>Pending</strong> tab for your approval.
+              </p>
+
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
+                <div className="fg">
+                  <label className="fl">School</label>
+                  <select className="fc" value={qrForm.school} onChange={e => setQrForm(f => ({ ...f, school:e.target.value, department:(DEPTS[e.target.value]||[])[0]||'' }))}>
+                    {SCHOOLS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="fg">
+                  <label className="fl">Department</label>
+                  <select className="fc" value={qrForm.department} onChange={e => setQrForm(f => ({ ...f, department:e.target.value }))}>
+                    {(DEPTS[qrForm.school]||[]).map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {!qrImg ? (
+                <button className="btn btn-lime" style={{ width:'100%' }} onClick={generateQR} disabled={qrLoading}>
+                  {qrLoading ? 'Generating…' : 'Generate QR Code'}
+                </button>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:14 }}>
+                  <div style={{ background:'#fff', borderRadius:12, padding:16, display:'inline-block' }}>
+                    <img src={qrImg} alt="QR Code" style={{ width:220, height:220, display:'block' }} />
+                  </div>
+                  <div style={{ fontSize:'0.72rem', color:'var(--muted)', wordBreak:'break-all', textAlign:'center', maxWidth:380, background:'var(--bg3)', padding:'8px 12px', borderRadius:8, border:'1px solid var(--border2)' }}>
+                    {qrLink}
+                  </div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button className="btn btn-outline btn-sm" onClick={copyLink}>Copy Link</button>
+                    <button className="btn btn-lime btn-sm" onClick={downloadQR}>Download PNG</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => { setQrImg(''); setQrLink('') }}>Regenerate</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add / Edit Modal ── */}
       {(modal === 'add' || modal === 'edit') && (
         <div className="overlay" onClick={e => e.target === e.currentTarget && closeModal()}>
           <div className="modal">
@@ -181,7 +354,7 @@ export default function Students() {
         </div>
       )}
 
-      {/* Delete Modal */}
+      {/* ── Delete Modal ── */}
       {modal === 'delete' && (
         <div className="overlay" onClick={e => e.target === e.currentTarget && closeModal()}>
           <div className="modal" style={{ maxWidth:380 }}>

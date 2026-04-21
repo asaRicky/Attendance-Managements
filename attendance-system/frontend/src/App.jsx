@@ -10,6 +10,7 @@ import Attendance from './pages/Attendance'
 import Reports from './pages/Reports'
 import Courses from './pages/Courses'
 import Settings from './pages/Settings'
+import StudentSelfRegister from './pages/StudentSelfRegister'
 
 function Guard({ children }) {
   const token = useAuthStore(s => s.token)
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="attendance" element={<Attendance />} />
         <Route path="reports"    element={<Reports />} />
         <Route path="settings"   element={<Settings />} />
+        <Route path="/student-register" element={<StudentSelfRegister />} />
 
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

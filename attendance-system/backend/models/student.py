@@ -13,6 +13,17 @@ class StudentCreate(BaseModel):
     phone:       Optional[str] = ''
     gender:      Optional[str] = 'Male'
 
+class StudentSelfRegister(BaseModel):
+    full_name:   str
+    student_id:  str
+    school:      Optional[str] = ''
+    department:  Optional[str] = ''
+    year:        Optional[int] = 1
+    semester:    Optional[int] = 1
+    email:       Optional[str] = ''
+    phone:       Optional[str] = ''
+    gender:      Optional[str] = 'Male'
+
 class StudentUpdate(BaseModel):
     full_name:   Optional[str] = None
     student_id:  Optional[str] = None

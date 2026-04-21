@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import Optional
 import secrets
 from datetime import datetime, timedelta
 
 from database import db
-from core.security import verify_password, create_access_token, hash_password
+from core.security import verify_password, create_access_token, hash_password, decode_access_token
 from core.email import (
     send_verification_email,
     send_welcome_email,
@@ -14,6 +15,19 @@ from core.email import (
 from pymongo.errors import DuplicateKeyError
 
 router = APIRouter()
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+
+# ── Auth dependency ───────────────────────────────────────────────────────────
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(401, "Invalid or expired token")
+    user = await db["users"].find_one({"username": payload.get("sub")})
+    if not user:
+        raise HTTPException(401, "User not found")
+    return user
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -54,11 +68,9 @@ async def register(data: RegisterRequest, bg: BackgroundTasks):
             "email":              (data.email or "").strip(),
             "role":               data.role or "lecturer",
             "school":             data.school or "",
-            # email verification
             "email_verified":     False,
             "verification_token": verification_token,
             "token_expires_at":   datetime.utcnow() + timedelta(hours=24),
-            # metadata
             "created_at":         datetime.utcnow(),
             "last_login":         None,
         })
@@ -67,9 +79,8 @@ async def register(data: RegisterRequest, bg: BackgroundTasks):
     except Exception as e:
         raise HTTPException(500, f"Registration failed: {str(e)}")
 
-    # send verification email in background (non-blocking)
-    if data.email:
-        bg.add_task(send_verification_email, data.email, data.full_name, verification_token)
+    if data.email and data.email.strip():
+        bg.add_task(send_verification_email, data.email.strip(), data.full_name.strip(), verification_token)
 
     return {"message": "Account created. Check your email to verify your account."}
 
@@ -88,7 +99,11 @@ async def verify_email(token: str, bg: BackgroundTasks):
 
     await db["users"].update_one(
         {"_id": user["_id"]},
-        {"$set": {"email_verified": True, "verification_token": None, "token_expires_at": None}},
+        {"$set": {
+            "email_verified":     True,
+            "verification_token": None,
+            "token_expires_at":   None,
+        }},
     )
 
     if user.get("email"):
@@ -104,7 +119,6 @@ async def resend_verification(bg: BackgroundTasks, body: dict):
     user = await db["users"].find_one({"username": username})
 
     if not user:
-        # don't reveal if user exists
         return {"message": "If that account exists, a new verification email has been sent."}
     if user.get("email_verified"):
         return {"message": "Your email is already verified."}
@@ -130,7 +144,6 @@ async def login(data: LoginRequest):
     if not user or not verify_password(data.password, user["password"]):
         raise HTTPException(401, "Invalid username or password")
 
-    # update last_login timestamp
     await db["users"].update_one(
         {"_id": user["_id"]},
         {"$set": {"last_login": datetime.utcnow()}},
@@ -156,7 +169,6 @@ async def login(data: LoginRequest):
 @router.post("/forgot-password")
 async def forgot_password(data: ForgotPasswordRequest, bg: BackgroundTasks):
     user = await db["users"].find_one({"email": data.email.strip()})
-    # always return same message — don't leak whether email exists
     msg = {"message": "If that email is registered, a reset link has been sent."}
     if not user:
         return msg
@@ -165,8 +177,8 @@ async def forgot_password(data: ForgotPasswordRequest, bg: BackgroundTasks):
     await db["users"].update_one(
         {"_id": user["_id"]},
         {"$set": {
-            "reset_token":    reset_token,
-            "reset_expires":  datetime.utcnow() + timedelta(hours=1),
+            "reset_token":   reset_token,
+            "reset_expires": datetime.utcnow() + timedelta(hours=1),
         }},
     )
     bg.add_task(send_password_reset_email, user["email"], user["full_name"], reset_token)
@@ -187,37 +199,65 @@ async def reset_password(data: ResetPasswordRequest):
     await db["users"].update_one(
         {"_id": user["_id"]},
         {"$set": {
-            "password":     hash_password(data.password),
-            "reset_token":  None,
+            "password":      hash_password(data.password),
+            "reset_token":   None,
             "reset_expires": None,
         }},
     )
     return {"message": "Password reset successfully. You can now sign in."}
 
+
+# ── Update profile ────────────────────────────────────────────────────────────
 @router.patch("/profile")
 async def update_profile(data: dict, current_user=Depends(get_current_user)):
-    await db["users"].update_one(
-        {"username": current_user["username"]},
-        {"$set": {"full_name": data.get("full_name"), "email": data.get("email"), "school": data.get("school")}}
-    )
+    update_fields = {}
+    if data.get("full_name") is not None:
+        update_fields["full_name"] = data["full_name"]
+    if data.get("email") is not None:
+        update_fields["email"] = data["email"]
+    if data.get("school") is not None:
+        update_fields["school"] = data["school"]
+
+    if update_fields:
+        await db["users"].update_one(
+            {"username": current_user["username"]},
+            {"$set": update_fields},
+        )
     return {"message": "Profile updated"}
 
+
+# ── Change password ───────────────────────────────────────────────────────────
 @router.post("/change-password")
 async def change_password(data: dict, current_user=Depends(get_current_user)):
+    if not data.get("current_password") or not data.get("new_password"):
+        raise HTTPException(400, "Both current_password and new_password are required.")
     if not verify_password(data["current_password"], current_user["password"]):
         raise HTTPException(400, "Current password is incorrect.")
+    if len(data["new_password"]) < 6:
+        raise HTTPException(400, "New password must be at least 6 characters.")
+
     await db["users"].update_one(
         {"username": current_user["username"]},
-        {"$set": {"password": hash_password(data["new_password"])}}
+        {"$set": {"password": hash_password(data["new_password"])}},
     )
     return {"message": "Password changed"}
 
+
+# ── Delete account ────────────────────────────────────────────────────────────
 @router.delete("/account")
 async def delete_account(current_user=Depends(get_current_user)):
     await db["users"].delete_one({"username": current_user["username"]})
-    # optionally cascade delete classes/attendance
     return {"message": "Account deleted"}
+
+
 # ── Me ────────────────────────────────────────────────────────────────────────
 @router.get("/me")
-async def me():
-    return {"message": "ok"}
+async def me(current_user=Depends(get_current_user)):
+    return {
+        "username":       current_user["username"],
+        "full_name":      current_user.get("full_name", ""),
+        "role":           current_user.get("role", "lecturer"),
+        "email":          current_user.get("email", ""),
+        "school":         current_user.get("school", ""),
+        "email_verified": current_user.get("email_verified", False),
+    }

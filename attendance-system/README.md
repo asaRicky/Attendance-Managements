@@ -140,7 +140,7 @@ attendance-system/
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/your-username/attendance-system.git
+git clone https://github.com/asaRicky/attendance-system.git
 cd attendance-system
 ```
 

@@ -1,476 +1,257 @@
-import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useAuthStore } from "../store/authStore";
-import client from "../api/client";
+import { useState } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
+import { useAuthStore } from '../store/authStore'
+import api from '../api/client'
 
-const style = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+function useToasts() {
+  const [toasts, setToasts] = useState([])
+  const push = (type, title, msg) => {
+    const id = Date.now()
+    setToasts(t => [...t, { id, type, title, msg }])
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4200)
+  }
+  const remove = id => setToasts(t => t.filter(x => x.id !== id))
+  return { toasts, push, remove }
+}
 
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --ink: #0a0a0f;
-    --paper: #f5f2eb;
-    --accent: #c8f04c;
-    --accent2: #4cf0b8;
-    --muted: #6b6860;
-    --danger: #e03e3e;
-    --border: rgba(10,10,15,0.12);
-    --font-display: 'Syne', sans-serif;
-    --font-body: 'DM Sans', sans-serif;
-  }
-
-  .login-root {
-    min-height: 100vh;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    font-family: var(--font-body);
-    overflow: hidden;
-  }
-
-  /* LEFT PANEL */
-  .login-left {
-    background: var(--ink);
-    position: relative;
-    display: flex; flex-direction: column;
-    justify-content: space-between;
-    padding: 48px;
-    overflow: hidden;
-  }
-
-  .login-left-bg {
-    position: absolute; inset: 0;
-    background:
-      radial-gradient(ellipse 60% 60% at 30% 40%, rgba(200,240,76,0.12) 0%, transparent 70%),
-      radial-gradient(ellipse 40% 40% at 70% 70%, rgba(76,240,184,0.08) 0%, transparent 60%);
-    pointer-events: none;
-  }
-
-  .login-left-grid {
-    position: absolute; inset: 0;
-    background-image:
-      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-    background-size: 48px 48px;
-    pointer-events: none;
-  }
-
-  .left-brand {
-    position: relative; z-index: 1;
-    display: flex; align-items: center; gap: 10px;
-    font-family: var(--font-display); font-weight: 800;
-    font-size: 1.25rem; color: white; letter-spacing: -0.03em;
-  }
-  .brand-dot {
-    width: 10px; height: 10px; border-radius: 50%;
-    background: var(--accent);
-    animation: pulse 2s ease-in-out infinite;
-  }
-  @keyframes pulse {
-    0%,100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.5); opacity: 0.7; }
-  }
-
-  .left-copy { position: relative; z-index: 1; }
-  .left-headline {
-    font-family: var(--font-display);
-    font-size: clamp(2.2rem, 3.5vw, 3.2rem);
-    font-weight: 800; letter-spacing: -0.04em; line-height: 1.05;
-    color: white; margin-bottom: 20px;
-  }
-  .left-headline span {
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  }
-  .left-sub { font-size: 0.9rem; color: rgba(255,255,255,0.45); line-height: 1.7; max-width: 320px; }
-
-  .left-stats {
-    position: relative; z-index: 1;
-    display: flex; gap: 32px; flex-wrap: wrap;
-  }
-  .left-stat {}
-  .left-stat-num {
-    font-family: var(--font-display); font-size: 1.6rem; font-weight: 800;
-    color: var(--accent); letter-spacing: -0.04em;
-  }
-  .left-stat-label { font-size: 0.72rem; color: rgba(255,255,255,0.35); margin-top: 2px; }
-
-  /* Floating live card */
-  .live-card {
-    position: absolute; top: 38%; right: 40px;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    backdrop-filter: blur(8px);
-    border-radius: 16px; padding: 16px 20px;
-    animation: float 4s ease-in-out infinite;
-  }
-  @keyframes float {
-    0%,100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
-  }
-  .live-label { font-size: 0.68rem; color: rgba(255,255,255,0.4); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
-  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent2); animation: blink 1.5s ease-in-out infinite; }
-  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.2; } }
-  .live-val { font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; color: white; letter-spacing: -0.03em; }
-  .live-sub { font-size: 0.7rem; color: rgba(255,255,255,0.35); margin-top: 4px; }
-
-  /* RIGHT PANEL */
-  .login-right {
-    background: var(--paper);
-    display: flex; align-items: center; justify-content: center;
-    padding: 48px;
-    position: relative;
-  }
-
-  .login-form-wrap {
-    width: 100%; max-width: 400px;
-    animation: slideIn 0.6s ease both;
-  }
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateX(30px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-
-  .form-header { margin-bottom: 40px; }
-  .form-eyebrow {
-    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
-  }
-  .form-title {
-    font-family: var(--font-display); font-size: 2.2rem; font-weight: 800;
-    letter-spacing: -0.04em; color: var(--ink); line-height: 1.1;
-  }
-
-  /* ROLE TABS */
-  .role-tabs {
-    display: flex; gap: 8px; margin-bottom: 32px;
-    background: white; border: 1px solid var(--border);
-    border-radius: 12px; padding: 4px;
-  }
-  .role-tab {
-    flex: 1; padding: 8px 12px; border-radius: 8px; border: none;
-    background: transparent; font-family: var(--font-body);
-    font-size: 0.8rem; font-weight: 500; color: var(--muted);
-    cursor: pointer; transition: all 0.2s;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-  }
-  .role-tab.active {
-    background: var(--ink); color: white;
-    box-shadow: 0 2px 8px rgba(10,10,15,0.2);
-  }
-
-  /* QUICK-FILL */
-  .quickfill {
-    background: white; border: 1px solid var(--border);
-    border-radius: 12px; padding: 12px 16px;
-    margin-bottom: 28px;
-    animation: fadeIn 0.3s ease;
-  }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-  .quickfill-label { font-size: 0.7rem; color: var(--muted); font-weight: 500; margin-bottom: 10px; letter-spacing: 0.04em; text-transform: uppercase; }
-  .quickfill-items { display: flex; flex-wrap: wrap; gap: 6px; }
-  .quickfill-btn {
-    background: var(--paper); border: 1px solid var(--border);
-    border-radius: 8px; padding: 6px 12px;
-    font-size: 0.76rem; font-weight: 500; color: var(--ink);
-    cursor: pointer; font-family: var(--font-body);
-    transition: all 0.15s;
-  }
-  .quickfill-btn:hover { background: var(--accent); border-color: var(--accent); }
-
-  /* FORM */
-  .field { margin-bottom: 20px; }
-  .field-label {
-    display: block; font-size: 0.8rem; font-weight: 500;
-    color: var(--ink); margin-bottom: 8px;
-  }
-  .field-input {
-    width: 100%; padding: 13px 16px;
-    border: 1.5px solid var(--border); border-radius: 12px;
-    background: white; font-family: var(--font-body);
-    font-size: 0.9rem; color: var(--ink);
-    outline: none; transition: border-color 0.2s, box-shadow 0.2s;
-    appearance: none;
-  }
-  .field-input:focus {
-    border-color: var(--ink);
-    box-shadow: 0 0 0 3px rgba(10,10,15,0.08);
-  }
-  .field-input.error { border-color: var(--danger); }
-  .field-hint { font-size: 0.72rem; color: var(--muted); margin-top: 5px; }
-
-  .error-box {
-    background: #fdf2f1; border: 1px solid #f5c6c3;
-    border-radius: 10px; padding: 12px 16px;
-    font-size: 0.82rem; color: var(--danger);
-    margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
-  }
-
-  .submit-btn {
-    width: 100%; padding: 14px;
-    background: var(--ink); color: var(--paper);
-    border: none; border-radius: 12px;
-    font-family: var(--font-display); font-size: 1rem; font-weight: 700;
-    letter-spacing: -0.02em; cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-  }
-  .submit-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 32px rgba(10,10,15,0.2);
-  }
-  .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-  .submit-btn.loading { background: #333; }
-
-  .spinner {
-    width: 16px; height: 16px;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: white;
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .form-footer {
-    text-align: center; margin-top: 24px;
-    font-size: 0.82rem; color: var(--muted);
-  }
-  .form-footer a { color: var(--ink); font-weight: 500; text-decoration: none; }
-  .form-footer a:hover { text-decoration: underline; }
-
-  .back-link {
-    position: absolute; top: 32px; left: 32px;
-    font-size: 0.82rem; color: var(--muted);
-    text-decoration: none; display: flex; align-items: center; gap: 6px;
-    transition: color 0.2s;
-  }
-  .back-link:hover { color: var(--ink); }
-
-  @media (max-width: 768px) {
-    .login-root { grid-template-columns: 1fr; }
-    .login-left { display: none; }
-    .login-right { padding: 32px 24px; align-items: flex-start; padding-top: 80px; }
-  }
-`;
-
-// Demo credentials matching seed.py
-const DEMO_ACCOUNTS = [
-  { label: "Admin", username: "admin", password: "admin123", role: "admin" },
-  { label: "Dr. Omondi", username: "dr.omondi", password: "lecturer123", role: "lecturer" },
-  { label: "Prof. Waweru", username: "prof.waweru", password: "lecturer123", role: "lecturer" },
-];
+const STATS = [
+  { color: '#c8760a', val: '10s',  label: 'to mark a full class' },
+  { color: '#7ab87e', val: '75%',  label: 'threshold tracking built-in' },
+  { color: '#d4795a', val: 'QR',   label: 'scan-to-attend per session' },
+]
 
 export default function Login() {
-  const [form, setForm] = useState({ username: "", password: "" });
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [activeRole, setActiveRole] = useState("lecturer");
-  const [liveCount, setLiveCount] = useState(7);
-  const { login } = useAuthStore();
-  const navigate = useNavigate();
+  const [form, setForm]       = useState({ username: '', password: '' })
+  const [showPw, setShowPw]   = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [errors, setErrors]   = useState({})
+  const { login }  = useAuthStore()
+  const navigate   = useNavigate()
+  const { toasts, push, remove } = useToasts()
 
-  // Simulate live active sessions
-  useEffect(() => {
-    const t = setInterval(() => {
-      setLiveCount(n => n + (Math.random() > 0.5 ? 1 : -1) * (Math.random() > 0.7 ? 1 : 0));
-    }, 3000);
-    return () => clearInterval(t);
-  }, []);
+  const validate = () => {
+    const e = {}
+    if (!form.username.trim()) e.username = 'Please enter your username.'
+    if (!form.password)        e.password = 'Please enter your password.'
+    setErrors(e); return Object.keys(e).length === 0
+  }
 
-  const handleSubmit = async (e) => {
+  const submit = async e => {
     e.preventDefault()
-    setError('')
+    if (!validate()) return
     setLoading(true)
     try {
-      const res = await client.post('/auth/login', {
-        username: form.username.trim(),
-        password: form.password,
-      })
-
-      const token = res.data.access_token
-
-      // Fetch the actual user profile after login
-      const meRes = await client.get('/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-
-      login(token, meRes.data)
-      navigate('/')
+      const res  = await api.post('/auth/login', form)
+      const user = res.data.user || { username: form.username, role: 'lecturer', full_name: form.username }
+      login(res.data.access_token, user)
+      push('success', 'Welcome back!', 'Redirecting to your dashboard…')
+      setTimeout(() => navigate('/dashboard'), 900)
     } catch (err) {
-      if (err.response?.status === 401) {
-        setError('Incorrect username or password.')
-      } else if (!err.response) {
-        setError('Cannot reach the server.')
-      } else {
-        setError(err.response?.data?.detail || 'Login failed.')
-      }
+      const msg = err.response?.data?.detail
+      push('error', 'Sign in failed', typeof msg === 'string' ? msg : 'Invalid username or password.')
+      setForm(f => ({ ...f, password: '' }))
     } finally {
       setLoading(false)
     }
-  };
-
-  const quickFill = (account) => {
-    setForm({ username: account.username, password: account.password });
-    setError("");
-  };
-
-  const filteredDemo = DEMO_ACCOUNTS.filter(a =>
-    activeRole === "admin" ? a.role === "admin" : a.role === "lecturer"
-  );
+  }
 
   return (
-    <>
-      <style>{style}</style>
-      <div className="login-root">
+    <div style={S.page}>
+      <style>{CSS}</style>
 
-        {/* ── LEFT PANEL ── */}
-        <div className="login-left">
-          <div className="login-left-bg" />
-          <div className="login-left-grid" />
+      <div style={S.toastRack}>
+        {toasts.map(t => <Toast key={t.id} t={t} onClose={() => remove(t.id)} />)}
+      </div>
 
-          <div className="left-brand">
-            <span className="brand-dot" />
-            AttendIQ
-          </div>
-
-          <div className="left-copy">
-            <h1 className="left-headline">
-              Track every<br />
-              <span>session,</span><br />
-              everywhere.
+      {/* ── Left decorative panel ── */}
+      <div style={S.left}>
+        <div style={S.glow1} /><div style={S.glow2} />
+        <div style={S.leftInner}>
+          <Logo />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '40px 0 24px' }}>
+            <div style={S.tag}>University attendance platform</div>
+            <h1 style={S.heroTitle}>
+              Mark attendance<br />in{' '}
+              <em style={{ color: '#c8760a', fontStyle: 'italic' }}>10 seconds</em>
             </h1>
-            <p className="left-sub">
-              The modern attendance platform built for Kenyan universities — multi-campus, real-time, and beautifully simple.
+            <p style={S.heroPara}>
+              Built for lecturers who value their time. No clipboards, no paper lists, no frustration.
             </p>
-          </div>
-
-          {/* Live sessions card */}
-          <div className="live-card">
-            <div className="live-label">
-              <span className="live-dot" />
-              Live right now
-            </div>
-            <div className="live-val">{liveCount}</div>
-            <div className="live-sub">active sessions across campuses</div>
-          </div>
-
-          <div className="left-stats">
-            <div className="left-stat">
-              <div className="left-stat-num">3</div>
-              <div className="left-stat-label">Institutions</div>
-            </div>
-            <div className="left-stat">
-              <div className="left-stat-num">5</div>
-              <div className="left-stat-label">Classes</div>
-            </div>
-            <div className="left-stat">
-              <div className="left-stat-num">15</div>
-              <div className="left-stat-label">Students enrolled</div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── RIGHT PANEL ── */}
-        <div className="login-right">
-          <Link to="/" className="back-link">← Home</Link>
-
-          <div className="login-form-wrap">
-            <div className="form-header">
-              <div className="form-eyebrow">Welcome back</div>
-              <div className="form-title">Sign in to<br />AttendIQ</div>
-            </div>
-
-            {/* Role selector */}
-            <div className="role-tabs">
-              <button
-                className={`role-tab ${activeRole === "lecturer" ? "active" : ""}`}
-                onClick={() => { setActiveRole("lecturer"); setForm({ username: "", password: "" }); setError(""); }}
-                type="button"
-              >
-                🎓 Lecturer
-              </button>
-              <button
-                className={`role-tab ${activeRole === "admin" ? "active" : ""}`}
-                onClick={() => { setActiveRole("admin"); setForm({ username: "", password: "" }); setError(""); }}
-                type="button"
-              >
-                🛡️ Admin
-              </button>
-            </div>
-
-            {/* Quick-fill demo accounts */}
-            <div className="quickfill">
-              <div className="quickfill-label">Demo · Quick fill</div>
-              <div className="quickfill-items">
-                {filteredDemo.map(a => (
-                  <button key={a.username} className="quickfill-btn" type="button" onClick={() => quickFill(a)}>
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit} noValidate>
-              <div className="field">
-                <label className="field-label" htmlFor="username">Username</label>
-                <input
-                  id="username"
-                  className={`field-input ${error ? "error" : ""}`}
-                  type="text"
-                  placeholder={activeRole === "admin" ? "admin" : "Your username"}
-                  value={form.username}
-                  onChange={e => { setForm(f => ({ ...f, username: e.target.value })); setError(""); }}
-                  autoFocus
-                  autoComplete="username"
-                  spellCheck={false}
-                />
-              </div>
-
-              <div className="field">
-                <label className="field-label" htmlFor="password">Password</label>
-                <input
-                  id="password"
-                  className={`field-input ${error ? "error" : ""}`}
-                  type="password"
-                  placeholder="••••••••"
-                  value={form.password}
-                  onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setError(""); }}
-                  autoComplete="current-password"
-                />
-                {activeRole === "admin" && (
-                  <div className="field-hint">Admin password: admin123</div>
-                )}
-                {activeRole === "lecturer" && (
-                  <div className="field-hint">Lecturer password: lecturer123</div>
-                )}
-              </div>
-
-              {error && (
-                <div className="error-box">
-                  <span>⚠️</span> {error}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 28 }}>
+              {STATS.map((s, i) => (
+                <div key={i} style={S.statPill}>
+                  <div style={{ ...S.statDot, background: s.color }} />
+                  <div style={S.statVal}>{s.val}</div>
+                  <div style={S.statLbl}>{s.label}</div>
                 </div>
-              )}
-
-              <button
-                className={`submit-btn ${loading ? "loading" : ""}`}
-                type="submit"
-                disabled={loading}
-              >
-                {loading ? (
-                  <><span className="spinner" /> Signing in...</>
-                ) : (
-                  <>Sign in →</>
-                )}
-              </button>
-            </form>
-
-            <div className="form-footer">
-              Don't have an account?{" "}
-              <Link to="/signup">Create one</Link>
+              ))}
             </div>
+          </div>
+          <div style={S.testi}>
+            <p style={S.testiQ}>"AttendIQ cut my admin time in half. I spend less than a minute on attendance now."</p>
+            <p style={S.testiBy}>Dr. Jane Mwangi · Strathmore University</p>
           </div>
         </div>
       </div>
-    </>
-  );
+
+      {/* ── Right form panel ── */}
+      <div style={S.right}>
+        <div style={S.formWrap} className="au-fade-up">
+          <div style={S.fhLabel}>Welcome back</div>
+          <h2 style={S.fhTitle}>
+            Sign in to your<br />
+            <em style={{ fontStyle: 'italic', color: '#6b6050' }}>dashboard</em>
+          </h2>
+          <p style={S.fhSub}>
+            Don't have an account?{' '}
+            <Link to="/signup" style={S.link}>Create one free →</Link>
+          </p>
+
+          <form onSubmit={submit} noValidate>
+            <Field label="Username" error={errors.username}>
+              <input className="au-fi" type="text" placeholder="Your username"
+                autoFocus autoComplete="username"
+                value={form.username}
+                onChange={e => { setForm(f => ({ ...f, username: e.target.value })); setErrors(x => ({ ...x, username: '' })) }} />
+            </Field>
+
+            <Field label="Password" error={errors.password} style={{ marginBottom: 22 }}>
+              <div style={{ position: 'relative' }}>
+                <input className="au-fi" type={showPw ? 'text' : 'password'}
+                  placeholder="••••••••" autoComplete="current-password"
+                  style={{ paddingRight: 40 }}
+                  value={form.password}
+                  onChange={e => { setForm(f => ({ ...f, password: e.target.value })); setErrors(x => ({ ...x, password: '' })) }} />
+                <EyeBtn open={showPw} toggle={() => setShowPw(v => !v)} />
+              </div>
+            </Field>
+
+            <button type="submit" disabled={loading} className="au-btn-main" style={{ opacity: loading ? 0.7 : 1 }}>
+              {loading ? <><Spin />Signing in…</> : 'Sign in →'}
+            </button>
+          </form>
+
+          <Divider />
+          <p style={{ textAlign: 'center', fontSize: '0.78rem', color: '#9e9080' }}>
+            New to AttendIQ?{' '}
+            <Link to="/signup" style={S.link}>Create an account</Link>
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Shared sub-components ── */
+export function Logo() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ width: 38, height: 38, background: '#c8760a', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.72rem', color: '#fff' }}>IQ</div>
+      <span style={{ fontWeight: 600, fontSize: '1.05rem', color: '#fff', letterSpacing: '-0.02em' }}>AttendIQ</span>
+    </div>
+  )
+}
+
+export function Field({ label, error, children, style }) {
+  return (
+    <div style={{ marginBottom: 14, ...style }}>
+      <label style={S.label}>{label}</label>
+      {children}
+      {error && <div style={S.fieldErr}>{error}</div>}
+    </div>
+  )
+}
+
+export function EyeBtn({ open, toggle }) {
+  return (
+    <button type="button" onClick={toggle} style={S.eyeBtn} tabIndex={-1}>
+      {open
+        ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/><line x1="2" y1="2" x2="14" y2="14"/></svg>
+        : <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>
+      }
+    </button>
+  )
+}
+
+export function Spin() {
+  return <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'au-spin .6s linear infinite', marginRight: 7, verticalAlign: 'middle' }} />
+}
+
+export function Divider() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0' }}>
+      <div style={{ flex: 1, height: 1, background: 'rgba(30,26,20,0.12)' }} />
+      <span style={{ fontSize: '0.68rem', color: '#9e9080', fontFamily: "'DM Mono',monospace" }}>or</span>
+      <div style={{ flex: 1, height: 1, background: 'rgba(30,26,20,0.12)' }} />
+    </div>
+  )
+}
+
+export function Toast({ t, onClose }) {
+  const colors = { success: '#4a7a55', error: '#b84c2a', info: '#c8760a' }
+  const icons  = { success: '✓', error: '✕', info: '!' }
+  return (
+    <div className="au-toast-in" style={{ ...S.toast, borderLeft: `3px solid ${colors[t.type]}` }}>
+      <div style={{ ...S.toastIcon, background: colors[t.type] + '18', color: colors[t.type] }}>{icons[t.type]}</div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 600, fontSize: '0.78rem', color: '#1e1a14', marginBottom: 1 }}>{t.title}</div>
+        <div style={{ fontSize: '0.73rem', color: '#6b6050', lineHeight: 1.4 }}>{t.msg}</div>
+      </div>
+      <button onClick={onClose} style={S.toastClose}>×</button>
+    </div>
+  )
+}
+
+/* ── CSS ── */
+export const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+*{box-sizing:border-box;}html,body{margin:0;padding:0;}
+body{background:#1e1a14;font-family:'DM Sans',sans-serif;}
+::selection{background:#c8760a;color:#fff;}
+.au-fi{width:100%;padding:10px 13px;background:#ede8de;border:1px solid rgba(30,26,20,0.18);border-radius:8px;color:#1e1a14;font-family:'DM Sans',sans-serif;font-size:0.875rem;outline:none;transition:border-color .15s,box-shadow .15s;}
+.au-fi:focus{border-color:#c8760a;box-shadow:0 0 0 3px rgba(200,118,10,0.14);}
+.au-fi::placeholder{color:#c4b8a8;}
+select.au-fi{cursor:pointer;} .au-fi option{background:#ede8de;color:#1e1a14;}
+.au-btn-main{width:100%;padding:11px 16px;background:#c8760a;color:#fff;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.88rem;font-weight:600;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:6px;}
+.au-btn-main:hover:not(:disabled){background:#a85f06;transform:translateY(-1px);box-shadow:0 6px 20px rgba(200,118,10,0.24);}
+.au-btn-main:disabled{cursor:not-allowed;}
+.au-btn-ghost{width:100%;padding:10px 16px;background:transparent;color:#6b6050;border:1px solid rgba(30,26,20,0.18);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:0.85rem;font-weight:500;cursor:pointer;transition:all .15s;}
+.au-btn-ghost:hover{border-color:rgba(30,26,20,0.35);color:#1e1a14;}
+.au-fade-up{animation:au-fadeUp .45s cubic-bezier(.4,0,.2,1) both;}
+.au-toast-in{animation:au-toastIn .3s cubic-bezier(.4,0,.2,1) both;}
+@keyframes au-fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes au-toastIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+@keyframes au-spin{to{transform:rotate(360deg)}}
+`
+
+/* ── Shared left-panel styles (also used by Signup) ── */
+export const S = {
+  page: { minHeight: '100vh', display: 'grid', gridTemplateColumns: '1fr 1fr', fontFamily: "'DM Sans',sans-serif" },
+  left: { background: '#1e1a14', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+  leftInner: { flex: 1, display: 'flex', flexDirection: 'column', padding: '44px 52px', position: 'relative', zIndex: 1, maxWidth: 560, width: '100%', margin: '0 auto' },
+  glow1: { position: 'absolute', top: -100, right: -100, width: 380, height: 380, borderRadius: '50%', background: 'radial-gradient(circle,rgba(200,118,10,0.1) 0%,transparent 70%)', pointerEvents: 'none' },
+  glow2: { position: 'absolute', bottom: -80, left: -60, width: 280, height: 280, borderRadius: '50%', background: 'radial-gradient(circle,rgba(184,76,42,0.07) 0%,transparent 70%)', pointerEvents: 'none' },
+  tag: { fontSize: '0.6rem', fontFamily: "'DM Mono',monospace", color: 'rgba(200,118,10,0.75)', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 12 },
+  heroTitle: { fontFamily: "'Playfair Display',serif", fontSize: 'clamp(1.9rem,3vw,2.5rem)', fontWeight: 700, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1.2 },
+  heroPara: { fontSize: '0.86rem', color: 'rgba(255,255,255,0.45)', lineHeight: 1.8, marginTop: 12, maxWidth: 300 },
+  statPill: { display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '10px 14px' },
+  statDot: { width: 8, height: 8, borderRadius: '50%', flexShrink: 0 },
+  statVal: { fontFamily: "'Playfair Display',serif", fontSize: '1.1rem', fontWeight: 600, color: '#fff', letterSpacing: '-0.02em', minWidth: 44 },
+  statLbl: { fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', fontFamily: "'DM Mono',monospace" },
+  testi: { borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 20 },
+  testiQ: { fontSize: '0.83rem', color: 'rgba(255,255,255,0.5)', lineHeight: 1.75, fontStyle: 'italic', fontFamily: "'Playfair Display',serif" },
+  testiBy: { fontSize: '0.62rem', fontFamily: "'DM Mono',monospace", color: 'rgba(255,255,255,0.28)', marginTop: 8, letterSpacing: '0.04em' },
+  right: { background: '#faf7f2', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 52px' },
+  formWrap: { width: '100%', maxWidth: 390 },
+  fhLabel: { fontSize: '0.6rem', fontFamily: "'DM Mono',monospace", color: '#c8760a', letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 8 },
+  fhTitle: { fontFamily: "'Playfair Display',serif", fontSize: 'clamp(1.6rem,2.5vw,2rem)', fontWeight: 700, color: '#1e1a14', letterSpacing: '-0.03em', lineHeight: 1.15 },
+  fhSub: { fontSize: '0.8rem', color: '#9e9080', marginTop: 8, marginBottom: 26, lineHeight: 1.6 },
+  label: { display: 'block', fontSize: '0.58rem', fontFamily: "'DM Mono',monospace", color: '#9e9080', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5 },
+  fieldErr: { fontSize: '0.68rem', color: '#b84c2a', fontFamily: "'DM Mono',monospace", marginTop: 5 },
+  eyeBtn: { position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#9e9080', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' },
+  link: { color: '#c8760a', fontWeight: 500, textDecoration: 'none' },
+  toastRack: { position: 'fixed', top: 20, right: 20, display: 'flex', flexDirection: 'column', gap: 8, zIndex: 999, pointerEvents: 'none' },
+  toast: { background: '#faf7f2', border: '1px solid rgba(30,26,20,0.15)', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, minWidth: 240, maxWidth: 300, pointerEvents: 'all', boxShadow: '0 4px 20px rgba(30,26,20,0.1)' },
+  toastIcon: { width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 10, fontWeight: 700 },
+  toastClose: { background: 'none', border: 'none', color: '#9e9080', cursor: 'pointer', fontSize: 16, padding: '0 2px', flexShrink: 0 },
 }

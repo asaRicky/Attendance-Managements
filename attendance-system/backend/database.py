@@ -8,8 +8,15 @@ client = AsyncIOMotorClient(MONGO_URL)
 db = client["attendance_db"]
 
 async def create_indexes():
-    await db["students"].create_index("reg_number", unique=True)
+    # Drop ALL existing indexes first to avoid conflicts from old unique indexes
+    for col_name in ["users", "students", "classes", "attendance"]:
+        try:
+            await db[col_name].drop_indexes()
+        except Exception:
+            pass
+
+    # Recreate clean — none are unique, duplicate checking handled in code
+    await db["students"].create_index("reg_number")
     await db["attendance"].create_index([("student_id", 1), ("date", 1)])
     await db["attendance"].create_index("unit_id")
-    await db["users"].create_index("username", unique=True)
-    await db["classes"].create_index("unit_code", unique=True)
+    await db["classes"].create_index("unit_code")

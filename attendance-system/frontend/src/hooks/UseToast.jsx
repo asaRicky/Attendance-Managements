@@ -2,23 +2,21 @@ import { useState, useCallback } from 'react'
 
 export function useToast() {
   const [toasts, setToasts] = useState([])
-
-  const addToast = useCallback((message, type = 'success') => {
+  const toast = useCallback((msg, type = 'ok') => {
     const id = Date.now()
-    setToasts(prev => [...prev, { id, message, type }])
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500)
+    setToasts(p => [...p, { id, msg, type }])
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3800)
   }, [])
-
-  return { toasts, addToast }
+  return { toasts, toast }
 }
 
-export function ToastContainer({ toasts }) {
+export function Toasts({ toasts }) {
   return (
-    <div className="toast-container">
+    <div className="toast-rack">
       {toasts.map(t => (
         <div key={t.id} className={`toast ${t.type}`}>
-          <span>{t.type === 'success' ? '✓' : '✕'}</span>
-          {t.message}
+          <span className="toast-icon">{t.type === 'ok' ? '✓' : '✕'}</span>
+          {t.msg}
         </div>
       ))}
     </div>

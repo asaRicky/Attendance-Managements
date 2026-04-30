@@ -47,7 +47,7 @@ export default function Login() {
     if (!validate()) return
     setLoading(true)
     try {
-      const res  = await api.post('/auth/login', form)
+      const res  = await api.post('/api/auth/login', form)
       const user = res.data.user || { username: form.username, role: 'lecturer', full_name: form.username }
       login(res.data.access_token, user)
       push('success', 'Welcome back!', 'Taking you to your dashboard…')

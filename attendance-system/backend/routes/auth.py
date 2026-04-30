@@ -261,3 +261,4 @@ async def me(current_user=Depends(get_current_user)):
         "school":         current_user.get("school", ""),
         "email_verified": current_user.get("email_verified", False),
     }
+

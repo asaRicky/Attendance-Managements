@@ -2,28 +2,44 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import api from '../api/client'
-import { GLOBAL_CSS, Logo, AuthField, EyeBtn, Spinner, ToastRack, useToasts } from './Landing'
+import { GLOBAL_CSS, AuthField, EyeBtn, Spinner, ToastRack, useToasts } from './Landing'
 
 const STATS = [
-  { color:'#60a5fa', val:'10s',  label:'to mark a full class' },
-  { color:'#34d399', val:'75%',  label:'threshold tracking built-in' },
-  { color:'#a78bfa', val:'QR',   label:'scan-to-attend per session' },
+  { color:'#60a5fa', val:'10s', label:'to mark a full class' },
+  { color:'#34d399', val:'75%', label:'threshold tracking built-in' },
+  { color:'#a78bfa', val:'QR',  label:'scan-to-attend per session' },
 ]
 
+const EXTRA_CSS = `
+  @keyframes float1{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,-30px)}}
+  @keyframes float2{0%,100%{transform:translate(0,0)}50%{transform:translate(-15px,20px)}}
+  @media(max-width:700px){
+    .login-grid{grid-template-columns:1fr!important}
+    .login-left{display:none!important}
+    .login-right{padding:32px 24px!important}
+  }
+`
+
 export default function Login() {
-  const [form,   setForm]   = useState({ username:'', password:'' })
-  const [showPw, setShowPw] = useState(false)
-  const [loading,setLoading]= useState(false)
-  const [errors, setErrors] = useState({})
+  const [form,    setForm]    = useState({ username:'', password:'' })
+  const [showPw,  setShowPw]  = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [errors,  setErrors]  = useState({})
   const { login } = useAuthStore()
   const navigate  = useNavigate()
   const { toasts, push, remove } = useToasts()
+
+  const set = k => e => {
+    setForm(f => ({ ...f, [k]: e.target.value }))
+    setErrors(x => ({ ...x, [k]: '' }))
+  }
 
   const validate = () => {
     const e = {}
     if (!form.username.trim()) e.username = 'Please enter your username.'
     if (!form.password)        e.password = 'Please enter your password.'
-    setErrors(e); return !Object.keys(e).length
+    setErrors(e)
+    return !Object.keys(e).length
   }
 
   const submit = async e => {
@@ -32,30 +48,34 @@ export default function Login() {
     setLoading(true)
     try {
       const res  = await api.post('/auth/login', form)
-      const user = res.data.user || { username: form.username, role:'lecturer', full_name: form.username }
+      const user = res.data.user || { username: form.username, role: 'lecturer', full_name: form.username }
       login(res.data.access_token, user)
-      push('success','Welcome back!','Taking you to your dashboard…')
+      push('success', 'Welcome back!', 'Taking you to your dashboard…')
       setTimeout(() => navigate('/dashboard'), 900)
-    } catch(err) {
+    } catch (err) {
       const msg = err.response?.data?.detail
-      push('error','Sign in failed', typeof msg==='string' ? msg : 'Invalid username or password.')
-      setForm(f => ({ ...f, password:'' }))
-    } finally { setLoading(false) }
+      push('error', 'Sign in failed', typeof msg === 'string' ? msg : 'Invalid username or password.')
+      setForm(f => ({ ...f, password: '' }))
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div style={S.page}>
+    <div className="login-grid" style={S.page}>
       <style>{GLOBAL_CSS}</style>
-      <style>{`
-        @keyframes float1{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,-30px)}}
-        @keyframes float2{0%,100%{transform:translate(0,0)}50%{transform:translate(-15px,20px)}}
-      `}</style>
+      <style>{EXTRA_CSS}</style>
       <ToastRack toasts={toasts} remove={remove} />
 
-      {/* ── Left panel ── */}
-      <div style={S.left}>
-        {/* Particles */}
-        {[{x:'10%',y:'20%',s:14,a:'float1 8s ease-in-out infinite',c:'rgba(255,255,255,.1)'},{x:'80%',y:'15%',s:10,a:'float2 10s ease-in-out infinite',c:'rgba(255,255,255,.08)'},{x:'20%',y:'75%',s:18,a:'float1 12s ease-in-out infinite 2s',c:'rgba(255,255,255,.07)'},{x:'75%',y:'70%',s:8,a:'float2 9s ease-in-out infinite 1s',c:'rgba(255,255,255,.1)'}].map((p,i)=>(
+      {/* ── Left panel ───────────────────────────────────────────────────── */}
+      <div className="login-left" style={S.left}>
+        {/* Floating particles */}
+        {[
+          { x:'10%', y:'20%', s:14, a:'float1 8s ease-in-out infinite',      c:'rgba(255,255,255,.10)' },
+          { x:'80%', y:'15%', s:10, a:'float2 10s ease-in-out infinite',     c:'rgba(255,255,255,.08)' },
+          { x:'20%', y:'75%', s:18, a:'float1 12s ease-in-out infinite 2s',  c:'rgba(255,255,255,.07)' },
+          { x:'75%', y:'70%', s:8,  a:'float2 9s ease-in-out infinite 1s',   c:'rgba(255,255,255,.10)' },
+        ].map((p, i) => (
           <div key={i} style={{ position:'absolute', left:p.x, top:p.y, width:p.s, height:p.s, borderRadius:'50%', background:p.c, animation:p.a, filter:'blur(1px)', pointerEvents:'none' }} />
         ))}
         <div style={{ position:'absolute', inset:0, backgroundImage:'linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px)', backgroundSize:'52px 52px', pointerEvents:'none' }} />
@@ -81,7 +101,7 @@ export default function Login() {
 
             {/* Stat pills */}
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-              {STATS.map((s,i) => (
+              {STATS.map((s, i) => (
                 <div key={i} style={{ display:'flex', alignItems:'center', gap:12, background:'rgba(255,255,255,.07)', border:'1px solid rgba(255,255,255,.1)', borderRadius:11, padding:'10px 14px', backdropFilter:'blur(8px)' }}>
                   <div style={{ width:8, height:8, borderRadius:'50%', background:s.color, boxShadow:`0 0 8px ${s.color}`, flexShrink:0 }} />
                   <div style={{ fontFamily:"'Bricolage Grotesque',sans-serif", fontSize:'1.1rem', fontWeight:700, color:'#fff', minWidth:44, letterSpacing:'-.03em' }}>{s.val}</div>
@@ -93,19 +113,23 @@ export default function Login() {
 
           {/* Testimonial */}
           <div style={{ borderTop:'1px solid rgba(255,255,255,.1)', paddingTop:20, marginTop:24 }}>
-            <p style={{ fontSize:'.82rem', color:'rgba(255,255,255,.5)', lineHeight:1.75, fontStyle:'italic', marginBottom:8 }}>"AttendIQ cut my admin time in half. I spend less than a minute on attendance now."</p>
-            <p style={{ fontSize:'.62rem', fontFamily:"'JetBrains Mono',monospace", color:'rgba(255,255,255,.3)', letterSpacing:'.04em' }}>Dr. Jane Mwangi · Strathmore University</p>
+            <p style={{ fontSize:'.82rem', color:'rgba(255,255,255,.5)', lineHeight:1.75, fontStyle:'italic', marginBottom:8 }}>
+              "AttendIQ cut my admin time in half. I spend less than a minute on attendance now."
+            </p>
+            <p style={{ fontSize:'.62rem', fontFamily:"'JetBrains Mono',monospace", color:'rgba(255,255,255,.3)', letterSpacing:'.04em' }}>
+              Dr. Jane Mwangi · Strathmore University
+            </p>
           </div>
         </div>
       </div>
 
-      {/* ── Right form panel ── */}
-      <div style={S.right}>
+      {/* ── Right form panel ─────────────────────────────────────────────── */}
+      <div className="login-right" style={S.right}>
         <div style={S.formCard}>
           {/* Back to landing */}
           <Link to="/" style={{ display:'inline-flex', alignItems:'center', gap:6, color:'#64748b', textDecoration:'none', fontSize:'.76rem', marginBottom:28, fontFamily:"'Space Grotesk',sans-serif", transition:'color .14s' }}
-            onMouseEnter={e=>e.currentTarget.style.color='#2563eb'}
-            onMouseLeave={e=>e.currentTarget.style.color='#64748b'}>
+            onMouseEnter={e => e.currentTarget.style.color = '#2563eb'}
+            onMouseLeave={e => e.currentTarget.style.color = '#64748b'}>
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 2L3 6.5 8 11"/></svg>
             Back to AttendIQ
           </Link>
@@ -119,19 +143,35 @@ export default function Login() {
 
           <form onSubmit={submit} noValidate>
             <AuthField label="Username" error={errors.username}>
-              <input className="au-i" type="text" placeholder="Your username" autoFocus autoComplete="username"
-                value={form.username} onChange={e => { setForm(f=>({...f,username:e.target.value})); setErrors(x=>({...x,username:''})) }} />
+              <input
+                className="au-i" type="text" placeholder="Your username"
+                autoFocus autoComplete="username"
+                value={form.username} onChange={set('username')}
+              />
             </AuthField>
 
             <AuthField label="Password" error={errors.password}>
               <div style={{ position:'relative' }}>
-                <input className="au-i" type={showPw?'text':'password'} placeholder="••••••••" autoComplete="current-password" style={{ paddingRight:40 }}
-                  value={form.password} onChange={e => { setForm(f=>({...f,password:e.target.value})); setErrors(x=>({...x,password:''})) }} />
-                <EyeBtn open={showPw} toggle={() => setShowPw(v=>!v)} />
+                <input
+                  className="au-i" type={showPw ? 'text' : 'password'}
+                  placeholder="••••••••" autoComplete="current-password"
+                  style={{ paddingRight:40 }}
+                  value={form.password} onChange={set('password')}
+                />
+                <EyeBtn open={showPw} toggle={() => setShowPw(v => !v)} />
               </div>
             </AuthField>
 
-            <button className="au-btn" type="submit" disabled={loading} style={{ marginTop:8 }}>
+            {/* Forgot password link */}
+            <div style={{ textAlign:'right', marginTop:-8, marginBottom:16 }}>
+              <Link to="/forgot-password" style={{ fontSize:'.72rem', color:'#2563eb', textDecoration:'none', fontFamily:"'Space Grotesk',sans-serif" }}
+                onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>
+                Forgot password?
+              </Link>
+            </div>
+
+            <button className="au-btn" type="submit" disabled={loading}>
               {loading ? <><Spinner /> Signing in…</> : 'Sign in →'}
             </button>
           </form>
@@ -153,9 +193,9 @@ export default function Login() {
 }
 
 const S = {
-  page: { minHeight:'100vh', display:'grid', gridTemplateColumns:'1fr 1fr', fontFamily:"'Space Grotesk',sans-serif" },
-  left: { background:'linear-gradient(150deg,#1e3a8a 0%,#1d4ed8 50%,#2563eb 100%)', position:'relative', overflow:'hidden', display:'flex', flexDirection:'column' },
+  page:      { minHeight:'100vh', display:'grid', gridTemplateColumns:'1fr 1fr', fontFamily:"'Space Grotesk',sans-serif" },
+  left:      { background:'linear-gradient(150deg,#1e3a8a 0%,#1d4ed8 50%,#2563eb 100%)', position:'relative', overflow:'hidden', display:'flex', flexDirection:'column' },
   leftInner: { flex:1, display:'flex', flexDirection:'column', padding:'44px 52px', position:'relative', zIndex:1 },
-  right: { background:'#f8faff', display:'flex', alignItems:'center', justifyContent:'center', padding:'48px 52px' },
-  formCard: { width:'100%', maxWidth:400 },
+  right:     { background:'#f8faff', display:'flex', alignItems:'center', justifyContent:'center', padding:'48px 52px' },
+  formCard:  { width:'100%', maxWidth:400 },
 }

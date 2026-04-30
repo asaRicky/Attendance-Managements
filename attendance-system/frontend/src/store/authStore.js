@@ -1,17 +1,26 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
-export const useAuthStore = create(set => ({
-  token: localStorage.getItem('aiq_token') || null,
-  user:  JSON.parse(localStorage.getItem('aiq_user') || 'null'),
+export const useAuthStore = create(
+  persist(
+    (set, get) => ({
+      token: null,
+      user:  null,
 
-  login(token, user) {
-    localStorage.setItem('aiq_token', token)
-    localStorage.setItem('aiq_user', JSON.stringify(user))
-    set({ token, user })
-  },
-  logout() {
-    localStorage.removeItem('aiq_token')
-    localStorage.removeItem('aiq_user')
-    set({ token: null, user: null })
-  },
-}))
+      login: (token, user) => set({ token, user }),
+
+      logout: () => set({ token: null, user: null }),
+
+      isLoggedIn: () => !!get().token,
+
+      updateUser: (partial) =>
+        set(state => ({ user: { ...state.user, ...partial } })),
+    }),
+    {
+      name:    'attendiq-auth',  // localStorage key
+      version: 1,
+      // Only persist these two fields — nothing else
+      partialize: (state) => ({ token: state.token, user: state.user }),
+    }
+  )
+)

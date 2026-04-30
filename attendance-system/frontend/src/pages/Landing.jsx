@@ -75,7 +75,6 @@ select.au-i{cursor:pointer} .au-i option{background:#fff;color:#0f172a}
 .au-ghost:hover{border-color:#2563eb;background:rgba(37,99,235,.04)}
 `
 
-/* ─── Shared sub-components ─────────────────────────────── */
 export function Logo({ size = 'md' }) {
   const s = size === 'sm' ? { box: 28, font: '.65rem', text: '.88rem' } : { box: 36, font: '.72rem', text: '1rem' }
   return (
@@ -142,7 +141,6 @@ export function useToasts() {
   return { toasts, push, remove: id => setToasts(t => t.filter(x => x.id !== id)) }
 }
 
-/* ─── Floating particles ─────────────────────────────────── */
 function Particles() {
   const shapes = [
     { x:'10%', y:'20%', size:12, anim:'float1 8s ease-in-out infinite', color:'rgba(37,99,235,.15)', delay:'0s' },
@@ -573,7 +571,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── FOOTER ───────────────────────────────────────────── */}
       <footer style={{ borderTop:'1px solid rgba(37,99,235,.1)', padding:'26px 40px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12, background:'#f0f4ff' }}>
         <Logo size="sm" />
         <div style={{ fontSize:'.68rem', fontFamily:"'JetBrains Mono',monospace", color:'#94a3b8' }}>Built for lecturers who value their time.</div>
@@ -586,7 +583,6 @@ export default function Landing() {
         </div>
       </footer>
 
-      {/* ── CHATBOT ──────────────────────────────────────────── */}
       <Chatbot onNavigate={navigate} />
     </div>
   )

@@ -8,13 +8,12 @@ app = FastAPI(title="AttendIQ API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # ← add frontend origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.include_router(auth.router,            prefix="/api/auth",          tags=["Auth"])
+app.include_router(auth.router,            prefix="/api/auth",          tags=["Auth"])              # ← ensure auth router is included
 app.include_router(students.router,        prefix="/api/students",       tags=["Students"])
 app.include_router(attendance.router,      prefix="/api/attendance",     tags=["Attendance"])
 app.include_router(reports.router,         prefix="/api/reports",        tags=["Reports"])

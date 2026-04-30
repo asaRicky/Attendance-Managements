@@ -12,11 +12,13 @@ import Courses from './pages/Courses'
 import Settings from './pages/Settings'
 import StudentSelfRegister from './pages/StudentSelfRegister'
 
+// Redirects logged-out users to /login
 function Guard({ children }) {
   const token = useAuthStore(s => s.token)
   return token ? children : <Navigate to="/login" replace />
 }
 
+// Redirects already-logged-in users away from /login and /signup
 function PublicOnly({ children }) {
   const token = useAuthStore(s => s.token)
   return token ? <Navigate to="/dashboard" replace /> : children
@@ -25,20 +27,31 @@ function PublicOnly({ children }) {
 export default function App() {
   return (
     <Routes>
+
       <Route path="/" element={<Landing />} />
-      <Route path="/login"  element={<PublicOnly><Login /></PublicOnly>} />
-      <Route path="/signup" element={<PublicOnly><Signup /></PublicOnly>} />
-      <Route path="/dashboard" element={<Guard><Layout /></Guard>}>
-        <Route index element={<Dashboard />} />
+
+      <Route path="/login" element={
+        <PublicOnly><Login /></PublicOnly>
+      } />
+
+      <Route path="/signup" element={
+        <PublicOnly><Signup /></PublicOnly>
+      } />
+
+      <Route path="/student-register" element={<StudentSelfRegister />} />
+
+      <Route path="/dashboard" element={
+        <Guard><Layout /></Guard>
+      }>
+        <Route index             element={<Dashboard />} />
         <Route path="students"   element={<Students />} />
         <Route path="courses"    element={<Courses />} />
         <Route path="attendance" element={<Attendance />} />
         <Route path="reports"    element={<Reports />} />
         <Route path="settings"   element={<Settings />} />
-
       </Route>
-      <Route path="/student-register" element={<StudentSelfRegister />} />
       <Route path="*" element={<Navigate to="/" replace />} />
+
     </Routes>
   )
 }
